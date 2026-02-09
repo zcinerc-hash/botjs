@@ -1,47 +1,82 @@
-// ==================== COMANDO /START ====================
-bot.onText(/\/start/, async (msg) => {
-  try {
-    const chatId = msg.chat.id;
-    const userId = msg.from.id;
+const admin = require("firebase-admin");
+const TelegramBot = require("node-telegram-bot-api");
 
-    console.log(`📥 Novo acesso: ${msg.from.first_name} (ID: ${userId})`);
+// Inicializar o bot do Telegram
+const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
 
-    // Verifica se é novo usuário
-    const novoUsuario = await isNovoUsuario(userId);
+async function salvarConvite(donoId, convidadoId) {
+  const ref = db.ref(`convites/${donoId}`);
+  const snapshot = await ref.once("value", null, { timeout: 30000 });
+  const convites = snapshot.val() || [];
 
-    // Registra/atualiza usuário no Firebase
-    await executarComRetry(async () => {
-      await db.ref(`usuarios/${userId}`).set({
-        nome: msg.from.first_name,
-        data: new Date().toISOString()
-      });
-    });
-
-    // Se é novo usuário, envia mensagem de boas-vindas única
-    if (novoUsuario) {
-      await enviarMensagemBoasVindas(chatId);
-      // Aguarda 3 segundos antes de mostrar o menu
-      setTimeout(async () => {
-        await mostrarMenu(chatId);
-      }, 3000);
-    } else {
-      // Se já é usuário existente, mostra direto o menu
-      await mostrarMenu(chatId);
-    }
-
-    // Processa convite se houver payload (parâmetro start)
-    if (msg.text.includes("start=")) {
-      const payload = msg.text.split("start=")[1];
-      if (payload) {
-        await salvarConvite(payload, userId);
-      }
-    }
-  } catch (error) {
-    console.error("❌ Erro no comando /start:", error);
-    await bot.sendMessage(chatId, "❌ Ocorreu um erro. Tente novamente em alguns segundos.");
+  // Verifica se o convidado já existe
+  const jaExiste = convites.some(c => c.convidado === convidadoId);
+  if (jaExiste) {
+    await bot.sendMessage(donoId, "⚠️ Esse usuário já foi convidado anteriormente...");
+    return;
   }
-});
 
+  convites.push({ convidado: convidadoId, data: new Date().toISOString() });
+  await ref.set(convites);
+
+  // Atualiza saldo do dono (0.5 USD ≈ 500 KZ por indicação)
+  const saldoRef = db.ref(`saldos/${donoId}`);
+  const saldoSnap = await saldoRef.once("value", null, { timeout: 30000 });
+  const saldo = saldoSnap.val() || { usd: 0, kz: 0 };
+
+  let mensagem = `🎉 Você convidou ${convites.length} pessoas únicas! Parabéns!\n💰 Saldo atualizado: ${saldo.usd.toFixed(2)} USD | ${saldo.kz} KZ`;
+
+  if (convites.length >= 15) {
+    mensagem += "\n🏆 WIN! Você atingiu 15 convites e ganhou bônus especial!";
+  }
+
+  await bot.sendMessage(donoId, mensagem);
+}
+
+// ==================== MENU PRINCIPAL ====================
+async function mostrarMenu(chatId) {
+  try {
+    await bot.sendMessage(
+      chatId,
+      `🚀 BELIEVE MINER – A Nova Era da Mineração Digital 🌍
+💎 Ganhe lucros internacionais agora mesmo!`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📋 Meu link de convite", callback_data: "meu_link" }],
+            [{ text: "👥 Meus convidados", callback_data: "meus_convidados" }],
+            [{ text: "💰 Meu saldo", callback_data: "meu_saldo" }],
+            [{ text: "🏦 Retirar saldo", callback_data: "retirar_saldo" }]
+          ]
+        }
+      }
+    );
+  } catch (error) {
+    console.error("❌ Erro ao mostrar menu:", error);
+  }
+}
+
+// ==================== MENSAGEM DE BOAS-VINDAS ====================
+async function enviarMensagemBoasVindas(chatId) {
+  try {
+    await bot.sendPhoto(
+      chatId,
+      "https://cdn.jornaldebrasilia.com.br/wp-content/uploads/2024/04/30134427/WhatsApp-Image-2024-04-30-at-12.45.15.jpeg",
+      {
+        caption: `📌 Convide e ganhe $50!  
+💰 Deposite apenas 9.000 KZ (≈ $9) e receba diariamente 300 KZ (≈ $0.30) até 1 ano.
+🚀 BELIEVE MINER – A Nova Era da Mineração Digital 🌍  
+💎 Ganhe lucros internacionais agora mesmo!
+A BELIEVE MINER chegou para revolucionar o mercado, pagando em USDT (Tether) e Kwanza (KZ) diretamente para você.
+✨ Por que escolher a BELIEVE MINER?
+- Pagamentos rápidos e seguros em USDT e KZ
+- Plataforma moderna e confiável`
+      }
+    );
+  } catch (error) {
+    console.error("❌ Erro ao enviar mensagem de boas-vindas:", error);
+  }
+}
 // ==================== CALLBACKS DOS BOTÕES ====================
 bot.on("callback_query", async (query) => {
   try {
@@ -54,19 +89,19 @@ bot.on("callback_query", async (query) => {
     }
 
     if (data === "meus_convidados") {
-      const snapshot = await db.ref(`convites/${userId}`).once('value', null, { timeout: 30000 });
+      const snapshot = await db.ref(`convites/${userId}`).once("value", null, { timeout: 30000 });
       const convites = snapshot.val() || [];
       await bot.sendMessage(chatId, `👥 Você já convidou ${convites.length} pessoas únicas.`);
     }
 
     if (data === "meu_saldo") {
-      const saldoSnap = await db.ref(`saldos/${userId}`).once('value', null, { timeout: 30000 });
+      const saldoSnap = await db.ref(`saldos/${userId}`).once("value", null, { timeout: 30000 });
       const saldo = saldoSnap.val() || { usd: 0, kz: 0 };
       await bot.sendMessage(chatId, `💰 Seu saldo: ${saldo.usd.toFixed(2)} USD | ${saldo.kz} KZ`);
     }
 
     if (data === "retirar_saldo") {
-      const saldoSnap = await db.ref(`saldos/${userId}`).once('value', null, { timeout: 30000 });
+      const saldoSnap = await db.ref(`saldos/${userId}`).once("value", null, { timeout: 30000 });
       const saldo = saldoSnap.val() || { usd: 0, kz: 0 };
 
       if (saldo.usd <= 0 && saldo.kz <= 0) {
@@ -92,7 +127,7 @@ bot.on("message", async (msg) => {
 
     // Se o usuário enviar número ou endereço USDT, processa saque
     if (/^\+?\d{7,15}$/.test(texto) || /^T[a-zA-Z0-9]{33}$/.test(texto)) {
-      const saldoSnap = await db.ref(`saldos/${userId}`).once('value', null, { timeout: 30000 });
+      const saldoSnap = await db.ref(`saldos/${userId}`).once("value", null, { timeout: 30000 });
       const saldo = saldoSnap.val() || { usd: 0, kz: 0 };
 
       if (saldo.usd > 0 || saldo.kz > 0) {
@@ -112,14 +147,58 @@ bot.on("message", async (msg) => {
   }
 });
 
+// ==================== MENSAGENS AUTOMÁTICAS ====================
+async function mensagensDiarias() {
+  let enviadas = 0;
+  let erros = 0;
+  const usuariosSnap = await db.ref("usuarios").once("value");
+  const usuarios = usuariosSnap.val() || {};
+
+  const mensagem = "📢 Mensagem diária automática!";
+
+  for (const chatId in usuarios) {
+    try {
+      await bot.sendMessage(chatId, mensagem);
+      enviadas++;
+    } catch (error) {
+      erros++;
+    }
+  }
+}
+
+const intervaloMensagens = 12 * 60 * 60 * 1000;
+setTimeout(() => {
+  mensagensDiarias();
+  setInterval(mensagensDiarias, intervaloMensagens);
+}, 60 * 1000);
+
+async function rankingSemanal() {
+  let enviadas = 0;
+  let erros = 0;
+  const usuariosSnap = await db.ref("usuarios").once("value");
+  const usuarios = usuariosSnap.val() || {};
+
+  const mensagemRanking = "🏆 Ranking semanal atualizado!";
+
+  for (const chatId in usuarios) {
+    try {
+      await bot.sendMessage(chatId, mensagemRanking);
+      enviadas++;
+    } catch (error) {
+      erros++;
+    }
+  }
+}
+
+const intervaloRanking = 7 * 24 * 60 * 60 * 1000;
+setTimeout(() => {
+  rankingSemanal();
+  setInterval(rankingSemanal, intervaloRanking);
+}, 2 * 60 * 1000);
+
 // ==================== INICIAR BOT ====================
 console.log("✅ Bot iniciado com sucesso!");
 console.log("📌 Bot rodando em polling mode...");
-
-// Mantém o processo vivo
-setInterval(() => {
-  // Ping silencioso para manter conexão ativa
-}, 30000);
 
 // Trata exceções não capturadas
 process.on("unhandledRejection", (reason) => {
@@ -133,3 +212,8 @@ process.on("uncaughtException", (error) => {
     process.exit(1);
   }, 5000);
 });
+
+// Mantém o processo vivo
+setInterval(() => {
+  // Ping silencioso para manter conexão ativa
+}, 30000);
