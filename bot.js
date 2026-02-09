@@ -23,16 +23,12 @@ db.ref('.info/connected').on('value', (snap) => {
 });
 
 // ==================== INICIALIZAR BOT TELEGRAM ====================
-const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err);
+});
 
-// ==================== TRATAMENTO DE ERROS GLOBAIS ====================
-bot.catch((err, ctx) => {
-  console.error('[ERRO TELEGRAM]', err);
-  try {
-    ctx.reply('❌ Erro ao processar sua requisição. Tente novamente.');
-  } catch (e) {
-    console.error('[ERRO AO RESPONDER]', e);
-  }
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
 });
 
 // ==================== FUNÇÃO COM RETRY ====================
