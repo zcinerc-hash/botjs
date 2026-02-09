@@ -1,4 +1,7 @@
+
 const admin = require("firebase-admin");
+const TelegramBot = require("node-telegram-bot-api");
+
 // Inicializar o bot do Telegram
 const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
 
@@ -63,18 +66,15 @@ async function salvarConvite(donoId, convidadoId) {
     const snapshot = await ref.once('value', null, { timeout: 30000 });
     const convites = snapshot.val() || [];
 
-    // Verifica se o convidado já existe
     const jaExiste = convites.some(c => c.convidado === convidadoId);
     if (jaExiste) {
-     await bot.sendMessage(donoId, "⚠️ Esse usuário já foi convidado anteriormente...");
-
+      await bot.sendMessage(donoId, "⚠️ Esse usuário já foi convidado anteriormente...");
       return;
     }
 
     convites.push({ convidado: convidadoId, data: new Date().toISOString() });
     await ref.set(convites);
 
-    // Atualiza saldo do dono (0.5 USD ≈ 500 KZ por indicação)
     const saldoRef = db.ref(`saldos/${donoId}`);
     const saldoSnap = await saldoRef.once('value', null, { timeout: 30000 });
     const saldo = saldoSnap.val() || { usd: 0, kz: 0 };
@@ -85,19 +85,19 @@ async function salvarConvite(donoId, convidadoId) {
 
     let mensagem = `🎉 Você convidou ${convites.length} pessoas únicas! Parabéns!\n💰 Saldo atualizado: ${saldo.usd.toFixed(2)} USD | ${saldo.kz} KZ`;
 
-if (convites.length >= 15) {
-  mensagem += "\n🏆 WIN! Você atingiu 15 convites e ganhou bônus especial!";
-}
+    if (convites.length >= 15) {
+      mensagem += "\n🏆 WIN! Você atingiu 15 convites e ganhou bônus especial!";
+    }
 
-await bot.sendMessage(donoId, mensagem);
+    await bot.sendMessage(donoId, mensagem);
   });
 }
 
-
 // ==================== MENU PRINCIPAL ====================
-async function mostrarMenu(ctx) {
+async function mostrarMenu(chatId) {
   try {
-    await ctx.reply(
+    await bot.sendMessage(
+      chatId,
       `🚀 BELIEVE MINER – A Nova Era da Mineração Digital 🌍
 💎 Ganhe lucros internacionais agora mesmo!`,
       {
@@ -118,19 +118,18 @@ async function mostrarMenu(ctx) {
   }
 }
 
-// ==================== MENSAGEM DE BOAS-VINDAS ÚNICA ====================
-async function enviarMensagemBoasVindas(ctx) {
+// ==================== MENSAGEM DE BOAS-VINDAS ====================
+async function enviarMensagemBoasVindas(chatId) {
   try {
-    await ctx.replyWithPhoto(
-      { url: "https://cdn.jornaldebrasilia.com.br/wp-content/uploads/2024/04/30134427/WhatsApp-Image-2024-04-30-at-12.45.15.jpeg" },
+    await bot.sendPhoto(
+      chatId,
+      "https://cdn.jornaldebrasilia.com.br/wp-content/uploads/2024/04/30134427/WhatsApp-Image-2024-04-30-at-12.45.15.jpeg",
       {
         caption: `📌 Convide e ganhe $50!  
 💰 Deposite apenas 9.000 KZ (≈ $9) e receba diariamente 300 KZ (≈ $0.30) até 1 ano.
 
 🚀 BELIEVE MINER – A Nova Era da Mineração Digital 🌍  
 💎 Ganhe lucros internacionais agora mesmo!
-
-A BELIEVE MINER chegou para revolucionar o mercado, pagando em USDT (Tether) e Kwanza (KZ) diretamente para você.
 
 ✨ Por que escolher a BELIEVE MINER?
 - Pagamentos rápidos e seguros em USDT e KZ
@@ -151,136 +150,112 @@ A BELIEVE MINER chegou para revolucionar o mercado, pagando em USDT (Tether) e K
   }
 }
 
-// ==================== COMANDO /START (ÚNICO) ====================
-bot.start(async (ctx) => {
+
+// ==================== COMANDO /START ====================
+bot.onText(/\/start/, async (msg) => {
   try {
-    const payload = ctx.startPayload;
-    const userId = ctx.from.id;
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
 
-    console.log(`📥 Novo acesso: ${ctx.from.first_name} (ID: ${userId})`);
+    console.log(`📥 Novo acesso: ${msg.from.first_name} (ID: ${userId})`);
 
-    // Verifica se é novo usuário
     const novoUsuario = await isNovoUsuario(userId);
 
-    // Registra/atualiza usuário no Firebase
     await executarComRetry(async () => {
       await db.ref(`usuarios/${userId}`).set({
-        nome: ctx.from.first_name,
+        nome: msg.from.first_name,
         data: new Date().toISOString()
       });
     });
 
-    // Se é novo usuário, envia mensagem de boas-vindas única
     if (novoUsuario) {
-      await enviarMensagemBoasVindas(ctx);
-
-      // Aguarda 3 segundos antes de mostrar o menu
+      await enviarMensagemBoasVindas(chatId);
       setTimeout(async () => {
-        await mostrarMenu(ctx);
+        await mostrarMenu(chatId);
       }, 3000);
     } else {
-      // Se já é usuário existente, mostra direto o menu
-      await mostrarMenu(ctx);
+      await mostrarMenu(chatId);
     }
 
-    // Processa convite se houver payload
-    if (payload) {
-      await salvarConvite(payload, userId);
+    // Processa convite se houver payload (parâmetro start)
+    if (msg.text.includes("start=")) {
+      const payload = msg.text.split("start=")[1];
+      if (payload) {
+        await salvarConvite(payload, userId);
+      }
     }
   } catch (error) {
     console.error('❌ Erro no comando /start:', error);
-    try {
-      await ctx.reply("❌ Ocorreu um erro. Tente novamente em alguns segundos.");
-    } catch (e) {
-      console.error('Erro ao responder no /start:', e);
-    }
+    await bot.sendMessage(chatId, "❌ Ocorreu um erro. Tente novamente em alguns segundos.");
   }
 });
 
 // ==================== CALLBACKS DOS BOTÕES ====================
-bot.on('callback_query', async (ctx) => {
+bot.on("callback_query", async (query) => {
   try {
-    const userId = ctx.from.id;
-    const data = ctx.callbackQuery.data;
+    const chatId = query.message.chat.id;
+    const userId = query.from.id;
+    const data = query.data;
 
     if (data === "meu_link") {
-      await ctx.reply(`📋 Seu link de convite: https://t.me/Believeminerbot?start=${userId}`);
-      await ctx.answerCbQuery();
+      await bot.sendMessage(chatId, `📋 Seu link de convite: https://t.me/Believeminerbot?start=${userId}`);
     }
 
     if (data === "meus_convidados") {
-      await executarComRetry(async () => {
-        const snapshot = await db.ref(`convites/${userId}`).once('value', null, { timeout: 30000 });
-        const convites = snapshot.val() || [];
-        await ctx.reply(`👥 Você já convidou ${convites.length} pessoas únicas.`);
-      });
-      await ctx.answerCbQuery();
+      const snapshot = await db.ref(`convites/${userId}`).once('value', null, { timeout: 30000 });
+      const convites = snapshot.val() || [];
+      await bot.sendMessage(chatId, `👥 Você já convidou ${convites.length} pessoas únicas.`);
     }
 
     if (data === "meu_saldo") {
-      await executarComRetry(async () => {
-        const saldoSnap = await db.ref(`saldos/${userId}`).once('value', null, { timeout: 30000 });
-        const saldo = saldoSnap.val() || { usd: 0, kz: 0 };
-        await ctx.reply(`💰 Seu saldo: ${saldo.usd.toFixed(2)} USD | ${saldo.kz} KZ`);
-      });
-      await ctx.answerCbQuery();
+      const saldoSnap = await db.ref(`saldos/${userId}`).once('value', null, { timeout: 30000 });
+      const saldo = saldoSnap.val() || { usd: 0, kz: 0 };
+      await bot.sendMessage(chatId, `💰 Seu saldo: ${saldo.usd.toFixed(2)} USD | ${saldo.kz} KZ`);
     }
 
     if (data === "retirar_saldo") {
-      await executarComRetry(async () => {
-        const saldoSnap = await db.ref(`saldos/${userId}`).once('value', null, { timeout: 30000 });
-        const saldo = saldoSnap.val() || { usd: 0, kz: 0 };
+      const saldoSnap = await db.ref(`saldos/${userId}`).once('value', null, { timeout: 30000 });
+      const saldo = saldoSnap.val() || { usd: 0, kz: 0 };
 
-        if (saldo.usd <= 0 && saldo.kz <= 0) {
-          await ctx.reply("⚠️ Você não possui saldo disponível para saque.");
-        } else {
-          await ctx.reply("🏦 Para retirar seu saldo, envie:\n\n📱 Seu número de celular internacional associado ao banco\nou\n💳 Endereço USDT (TRON20 Tether)\n\nAssim que enviar, o saque será processado com sucesso.");
-        }
-      });
-      await ctx.answerCbQuery();
+      if (saldo.usd <= 0 && saldo.kz <= 0) {
+        await bot.sendMessage(chatId, "⚠️ Você não possui saldo disponível para saque.");
+      } else {
+        await bot.sendMessage(chatId, "🏦 Para retirar seu saldo, envie:\n\n📱 Seu número de celular internacional associado ao banco\nou\n💳 Endereço USDT (TRON20 Tether)\n\nAssim que enviar, o saque será processado com sucesso.");
+      }
     }
+
+    await bot.answerCallbackQuery(query.id);
   } catch (error) {
     console.error('❌ Erro no callback_query:', error);
-    try {
-      await ctx.answerCbQuery('❌ Erro ao processar requisição');
-    } catch (e) {
-      console.error('Erro ao responder callback:', e);
-    }
+    await bot.answerCallbackQuery(query.id, { text: '❌ Erro ao processar requisição' });
   }
 });
 
 // ==================== FALLBACK: QUALQUER TEXTO NÃO RECONHECIDO ====================
-bot.on('text', async (ctx) => {
+bot.on("message", async (msg) => {
   try {
-    const texto = ctx.message.text.trim();
-    const userId = ctx.from.id;
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const texto = msg.text.trim();
 
-    // Se o usuário enviar número ou endereço USDT, processa saque
     if (/^\+?\d{7,15}$/.test(texto) || /^T[a-zA-Z0-9]{33}$/.test(texto)) {
-      await executarComRetry(async () => {
-        const saldoSnap = await db.ref(`saldos/${userId}`).once('value', null, { timeout: 30000 });
-        const saldo = saldoSnap.val() || { usd: 0, kz: 0 };
+      const saldoSnap = await db.ref(`saldos/${userId}`).once('value', null, { timeout: 30000 });
+      const saldo = saldoSnap.val() || { usd: 0, kz: 0 };
 
-        if (saldo.usd > 0 || saldo.kz > 0) {
-          // Zera saldo após saque
-          await db.ref(`saldos/${userId}`).set({ usd: 0, kz: 0 });
-          await ctx.reply("✅ Levantamento realizado com sucesso! Verifique sua carteira ou conta bancária.");
-          console.log(`💸 Saque processado para usuário ${userId}`);
-        } else {
-          await ctx.reply("⚠️ Você não possui saldo disponível para saque.");
-        }
-      });
+      if (saldo.usd > 0 || saldo.kz > 0) {
+        await db.ref(`saldos/${userId}`).set({ usd: 0, kz: 0 });
+        await bot.sendMessage(chatId, "✅ Levantamento realizado com sucesso! Verifique sua carteira ou conta bancária.");
+        console.log(`💸 Saque processado para usuário ${userId}`);
+      } else {
+        await bot.sendMessage(chatId, "⚠️ Você não possui saldo disponível para saque.");
+      }
     } else {
-      await ctx.reply("⚠️ Não entendi sua mensagem. Voltando ao menu principal...");
-      await mostrarMenu(ctx);
+      await bot.sendMessage(chatId, "⚠️ Não entendi sua mensagem. Voltando ao menu principal...");
+      await mostrarMenu(chatId);
     }
   } catch (error) {
     console.error('❌ Erro ao processar texto:', error);
-    try {
-      await ctx.reply("❌ Ocorreu um erro ao processar sua mensagem.");
-    } catch (e) {
-      console.error('Erro ao responder texto:', e);
-    }
+    await bot.sendMessage(msg.chat.id, "❌ Ocorreu um erro ao processar sua mensagem.");
   }
 });
 
@@ -305,7 +280,7 @@ async function mensagensDiarias() {
 
     for (const chatId in usuarios) {
       try {
-        await bot.telegram.sendMessage(chatId, mensagem);
+        await bot.sendMessage(chatId, mensagem);
         enviadas++;
       } catch (error) {
         erros++;
@@ -319,7 +294,6 @@ async function mensagensDiarias() {
   }
 }
 
-// Envia 2 vezes por dia (12h de intervalo) - Primeira execução após 1 minuto
 const intervaloMensagens = 12 * 60 * 60 * 1000;
 setTimeout(() => {
   mensagensDiarias();
@@ -355,7 +329,7 @@ async function rankingSemanal() {
 
     for (const chatId in usuarios) {
       try {
-        await bot.telegram.sendMessage(chatId, mensagemRanking);
+        await bot.sendMessage(chatId, mensagemRanking);
         enviadas++;
       } catch (error) {
         erros++;
@@ -369,7 +343,6 @@ async function rankingSemanal() {
   }
 }
 
-// Envia ranking 1 vez por semana (a cada 7 dias) - Primeira execução após 2 minutos
 const intervaloRanking = 7 * 24 * 60 * 60 * 1000;
 setTimeout(() => {
   rankingSemanal();
@@ -377,47 +350,5 @@ setTimeout(() => {
 }, 2 * 60 * 1000);
 
 // ==================== INICIAR BOT ====================
-async function iniciarBot() {
-  try {
-    await bot.launch();
-    console.log('✅ Bot iniciado com sucesso!');
-    console.log('📌 Bot rodando em polling mode...');
-  } catch (error) {
-    console.error('❌ Erro ao iniciar bot:', error);
-    console.log('⏳ Tentando reconectar em 10 segundos...');
-    setTimeout(iniciarBot, 10000);
-  }
-}
-
-iniciarBot();
-
-// ==================== GRACEFUL SHUTDOWN ====================
-process.once('SIGINT', () => {
-  console.log('\n⏹️ Parando bot gracefully (SIGINT)...');
-  bot.stop('SIGINT');
-  process.exit(0);
-});
-
-process.once('SIGTERM', () => {
-  console.log('\n⏹️ Parando bot gracefully (SIGTERM)...');
-  bot.stop('SIGTERM');
-  process.exit(0);
-});
-
-// Trata exceções não capturadas
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Promise rejection não tratada:', reason);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('❌ Exceção não capturada:', error);
-  console.log('⏳ Reiniciando em 5 segundos...');
-  setTimeout(() => {
-    process.exit(1);
-  }, 5000);
-});
-
-// Mantém o processo vivo
-setInterval(() => {
-  // Ping silencioso para manter conexão ativa
-}, 30000);
+console.log('✅ Bot iniciado com sucesso!');
+console.log('📌 Bot rodando em polling mode...');
