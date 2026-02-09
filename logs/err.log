@@ -1,0 +1,38 @@
+2026-02-09 07:07:12 +01:00: ❌ Erro ao enviar para 7365277188: 403: Forbidden: bot was blocked by the user
+2026-02-09 07:07:13 +01:00: ❌ Erro ao enviar para 7463660032: 403: Forbidden: bot was blocked by the user
+2026-02-09 07:07:14 +01:00: ❌ Erro ao enviar para 7938767745: 403: Forbidden: bot was blocked by the user
+2026-02-09 07:08:12 +01:00: ❌ Erro ao enviar ranking para 7365277188: 403: Forbidden: bot was blocked by the user
+2026-02-09 07:08:13 +01:00: ❌ Erro ao enviar ranking para 7463660032: 403: Forbidden: bot was blocked by the user
+2026-02-09 07:08:14 +01:00: ❌ Erro ao enviar ranking para 7938767745: 403: Forbidden: bot was blocked by the user
+2026-02-09 07:16:38 +01:00: ❌ Erro ao enviar para 7365277188: 403: Forbidden: bot was blocked by the user
+2026-02-09 07:16:38 +01:00: ❌ Erro ao enviar para 7463660032: 403: Forbidden: bot was blocked by the user
+2026-02-09 07:16:39 +01:00: ❌ Erro ao enviar para 7938767745: 403: Forbidden: bot was blocked by the user
+2026-02-09 07:17:38 +01:00: ❌ Erro ao enviar ranking para 7365277188: 403: Forbidden: bot was blocked by the user
+2026-02-09 07:17:38 +01:00: ❌ Erro ao enviar ranking para 7463660032: 403: Forbidden: bot was blocked by the user
+2026-02-09 07:17:39 +01:00: ❌ Erro ao enviar ranking para 7938767745: 403: Forbidden: bot was blocked by the user
+2026-02-09 09:39:52 +01:00: Erro ao enviar boas-vindas: FetchError: request to https://cdn.jornaldebrasilia.com.br/wp-content/uploads/2024/04/30134427/WhatsApp-Image-2024-04-30-at-12.45.15.jpeg failed, reason: read ECONNRESET
+    at ClientRequest.<anonymous> (C:\Users\HP\Downloads\Telegram Desktop\minerbot\node_modules\node-fetch\lib\index.js:1501:11)
+    at ClientRequest.emit (node:events:518:28)
+    at emitErrorEvent (node:_http_client:104:11)
+    at TLSSocket.socketErrorListener (node:_http_client:518:5)
+    at TLSSocket.emit (node:events:518:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  type: 'system',
+  errno: 'ECONNRESET',
+  code: 'ECONNRESET'
+}
+2026-02-09 09:39:56 +01:00: Erro ao mostrar menu: FetchError: request to https://api.telegram.org/bot8472950610:[REDACTED]/sendMessage failed, reason: read ECONNRESET
+    at ClientRequest.<anonymous> (C:\Users\HP\Downloads\Telegram Desktop\minerbot\node_modules\node-fetch\lib\index.js:1501:11)
+    at ClientRequest.emit (node:events:518:28)
+    at emitErrorEvent (node:_http_client:104:11)
+    at TLSSocket.socketErrorListener (node:_http_client:518:5)
+    at TLSSocket.emit (node:events:518:28)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  type: 'system',
+  errno: 'ECONNRESET',
+  code: 'ECONNRESET'
+}
