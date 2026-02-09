@@ -1,16 +1,14 @@
-const { Telegraf } = require('telegraf');
-const admin = require('firebase-admin');
-const serviceAccount = require('./firebase-key.json');
+const admin = require("firebase-admin");
+const TelegramBot = require("node-telegram-bot-api");
 
-// ==================== CONFIGURAÇÃO FIREBASE COM TIMEOUT ====================
+// Inicializa Firebase usando variáveis de ambiente
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://nzilaexpo-default-rtdb.firebaseio.com",
-  connectionSettings: {
-    timeout: 180000, // 3 minutos para conexão
-    enableOfflineStoreProtection: true,
-    maxRetries: 5
-  }
+  credential: admin.credential.cert({
+    projectId: process.env.FIREBASE_PROJECT_ID,
+    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  }),
+  databaseURL: "https://nzilaexpo-default-rtdb.firebaseio.com"
 });
 
 const db = admin.database();
@@ -25,7 +23,7 @@ db.ref('.info/connected').on('value', (snap) => {
 });
 
 // ==================== INICIALIZAR BOT TELEGRAM ====================
-const bot = new Telegraf('8472950610:AAHlA5meuh_FgbxIE7IPsSPuJn2Qo7aCf0E');
+const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
 
 // ==================== TRATAMENTO DE ERROS GLOBAIS ====================
 bot.catch((err, ctx) => {
