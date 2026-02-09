@@ -1,5 +1,6 @@
 const admin = require("firebase-admin");
-const TelegramBot = require("node-telegram-bot-api");
+// Inicializar o bot do Telegram
+const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
 
 // Inicializa Firebase usando variáveis de ambiente
 admin.initializeApp({
@@ -65,7 +66,8 @@ async function salvarConvite(donoId, convidadoId) {
     // Verifica se o convidado já existe
     const jaExiste = convites.some(c => c.convidado === convidadoId);
     if (jaExiste) {
-      await bot.telegram.sendMessage(donoId, "⚠️ Esse usuário já foi convidado anteriormente. Convites duplicados não são contabilizados.");
+     await bot.sendMessage(donoId, "⚠️ Esse usuário já foi convidado anteriormente...");
+
       return;
     }
 
@@ -83,13 +85,14 @@ async function salvarConvite(donoId, convidadoId) {
 
     let mensagem = `🎉 Você convidou ${convites.length} pessoas únicas! Parabéns!\n💰 Saldo atualizado: ${saldo.usd.toFixed(2)} USD | ${saldo.kz} KZ`;
 
-    if (convites.length >= 15) {
-      mensagem += "\n🏆 WIN! Você atingiu 15 convites e ganhou bônus especial!";
-    }
+if (convites.length >= 15) {
+  mensagem += "\n🏆 WIN! Você atingiu 15 convites e ganhou bônus especial!";
+}
 
-    await bot.telegram.sendMessage(donoId, mensagem);
+await bot.sendMessage(donoId, mensagem);
   });
 }
+
 
 // ==================== MENU PRINCIPAL ====================
 async function mostrarMenu(ctx) {
