@@ -1,6 +1,17 @@
 const admin = require("firebase-admin");
 const TelegramBot = require("node-telegram-bot-api");
 
+// Inicializar Firebase
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+    databaseURL: process.env.FIREBASE_URL // configure esta variável no Railway
+  });
+}
+
+// Criar referência para o banco
+const db = admin.database();
+
 // Inicializar o bot do Telegram
 const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
 
@@ -55,6 +66,7 @@ async function mostrarMenu(chatId) {
     console.error("❌ Erro ao mostrar menu:", error);
   }
 }
+
 
 // ==================== MENSAGEM DE BOAS-VINDAS ====================
 async function enviarMensagemBoasVindas(chatId) {
