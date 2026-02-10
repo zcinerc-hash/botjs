@@ -4,7 +4,8 @@ const TelegramBot = require("node-telegram-bot-api");
 // ==================== INICIALIZAÇÃO: FIREBASE COM SERVICE ACCOUNT ====================
 try {
   // Ler e fazer parse da variável de ambiente
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  console.log("DEBUG FIREBASE_SERVICE_ACCOUNT:", process.env.FIREBASE_SERVICE_ACCOUNT?.substring(0, 200));
+
 
   if (!admin.apps.length) {
     admin.initializeApp({
