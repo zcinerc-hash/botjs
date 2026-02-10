@@ -2,6 +2,7 @@
   "name": "minerbot",
   "version": "1.0.0",
   "main": "bot.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node bot.js"
   },
@@ -10,8 +11,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "dotenv": "^17.2.4",
     "firebase-admin": "^13.6.1",
     "node-telegram-bot-api": "^0.61.0"
   }
 }
-
