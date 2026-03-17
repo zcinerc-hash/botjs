@@ -3,8 +3,34 @@ const fs = require("fs");
 const path = require("path");
 const admin = require("firebase-admin");
 const TelegramBot = require("node-telegram-bot-api");
+const cron = require("node-cron");
+const express = require("express");
 
 let bot; // Variável global para o bot
+
+// ==================== INICIALIZAR EXPRESS PARA HEALTH CHECK ====================
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(express.json());
+
+// Rota de Health Check
+app.get("/health", (req, res) => {
+  res.status(200).send("OK - Bot rodando!");
+});
+
+// Rota raiz
+app.get("/", (req, res) => {
+  res.status(200).json({ status: "Bot Telegram rodando com sucesso!", timestamp: new Date().toISOString() });
+});
+
+// Iniciar servidor Express (não bloqueia o resto do código)
+app.listen(PORT, () => {
+  console.log(`\n🌐 Servidor HTTP rodando na porta ${PORT}`);
+  console.log(`   📍 Health Check: http://localhost:${PORT}/health`);
+  console.log(`   📍 Status: http://localhost:${PORT}/\n`);
+});
 
 // ==================== DEBUG INICIAL ====================
 console.log("\n");
@@ -16,6 +42,7 @@ console.log("📋 DEBUG - Variáveis de Ambiente:");
 console.log("   TELEGRAM_TOKEN:", process.env.TELEGRAM_TOKEN ? "✅ Configurado" : "❌ Não configurado");
 console.log("   FIREBASE_SERVICE_ACCOUNT:", process.env.FIREBASE_SERVICE_ACCOUNT ? "✅ Configurado" : "❌ Não configurado");
 console.log("   NODE_ENV:", process.env.NODE_ENV || "desenvolvimento");
+console.log("   PORT:", PORT);
 console.log("");
 
 // ==================== INICIALIZAR FIREBASE ====================
@@ -48,7 +75,7 @@ async function inicializarFirebase() {
         }
       }
     }
-    // Método 3: Fallback para arquivo local padrão
+    // Método 2: Fallback para arquivo local padrão
     else if (fs.existsSync("./serviceAccountKey.json")) {
       console.log("   📍 Variável de ambiente não definida, usando arquivo local padrão...");
       serviceAccount = require("./serviceAccountKey.json");
@@ -127,7 +154,7 @@ async function executarComRetry(funcao, tentativas = 3, delay = 1000) {
 
 // ==================== FUNÇÕES AUXILIARES ====================
 
-// Função auxiliar para verificar se usuário bloqueou o bot
+// Função auxiliar para verificar se usuário bloqueou o bot (ERRO 403)
 function verificarBloqueio(error) {
   return error.response && error.response.statusCode === 403 && error.response.body && error.response.body.description.includes("blocked");
 }
@@ -135,8 +162,9 @@ function verificarBloqueio(error) {
 // Função para enviar mensagem com tratamento de bloqueio
 function enviarMensagemComBloqueio(chatId, mensagem, opcoes = {}) {
   return bot.sendMessage(chatId, mensagem, opcoes).catch((err) => {
+    // ✅ Tratamento de erro 403 - usuário bloqueou o bot
     if (verificarBloqueio(err)) {
-      console.log(`🚫 Usuário ${chatId} bloqueou o bot`);
+      console.log(`🚫 Usuário ${chatId} bloqueou o bot (erro 403)`);
     } else {
       throw err;
     }
@@ -262,6 +290,7 @@ function inicializarBotTelegram() {
     console.log("   📍 Token encontrado");
     console.log("   📍 Criando instância do bot...");
 
+    // ✅ Bot em polling mode
     bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
 
     console.log("✅ Bot Telegram inicializado com sucesso!");
@@ -450,9 +479,10 @@ async function mensagensDiarias() {
 
     for (const chatId in usuarios) {
       try {
+        // ✅ Tratamento de erro 403
         await bot.sendMessage(chatId, mensagem).catch((err) => {
-          if (verificarBloqueio(err)) {
-            console.log(`🚫 Usuário ${chatId} bloqueou o bot`);
+          if (err.response && err.response.statusCode === 403) {
+            console.log(`🚫 Usuário ${chatId} bloqueou o bot (erro 403)`);
             bloqueados++;
           } else {
             throw err;
@@ -508,9 +538,10 @@ async function rankingSemanal() {
 
     for (const chatId in usuarios) {
       try {
+        // ✅ Tratamento de erro 403
         await bot.sendMessage(chatId, mensagemRanking).catch((err) => {
-          if (verificarBloqueio(err)) {
-            console.log(`🚫 Usuário ${chatId} bloqueou o bot`);
+          if (err.response && err.response.statusCode === 403) {
+            console.log(`🚫 Usuário ${chatId} bloqueou o bot (erro 403)`);
             bloqueados++;
           } else {
             throw err;
@@ -535,6 +566,64 @@ setTimeout(() => {
   rankingSemanal();
   setInterval(rankingSemanal, intervaloRanking);
 }, 2 * 60 * 1000);
+
+// ==================== AGENDAMENTO AUTOMÁTICO COM NODE-CRON ====================
+console.log("\n📅 Configurando agendamento automático de mensagens...\n");
+
+// ✅ Horários fixos: 9h, 16h e 22h
+const horariosAgendados = ["09:00", "16:00", "22:00"];
+
+horariosAgendados.forEach((horario) => {
+  const [hora, minuto] = horario.split(":");
+  
+  // Formato cron: minuto hora * * *
+  const cronExpression = `${minuto} ${hora} * * *`;
+  
+  cron.schedule(cronExpression, async () => {
+    console.log(`\n⏰ [${new Date().toLocaleTimeString('pt-BR')}] ⏰ Acionando envio automático agendado para ${horario}...\n`);
+    await enviarMensagensAutomaticas();
+  });
+  
+  console.log(`   ✅ Agendamento criado para ${horario} (Cron: ${cronExpression})`);
+});
+
+// ✅ Função para enviar mensagens automáticas agendadas
+async function enviarMensagensAutomaticas() {
+  try {
+    console.log('📤 [AGENDADO] Enviando mensagens automáticas...');
+    let enviadas = 0;
+    let bloqueados = 0;
+    let erros = 0;
+
+    const snapshot = await global.db.ref('usuarios').once('value', null, { timeout: 60000 });
+    const usuarios = snapshot.val() || {};
+    
+    // ✅ Mensagem automática padrão
+    const mensagemAutomatica = "🤖 Mensagem automática do bot\n\n⏰ Verifique seus ganhos agora mesmo! 💰";
+
+    for (const chatId in usuarios) {
+      try {
+        // ✅ Tratamento de erro 403 - usuário bloqueou o bot
+        await bot.sendMessage(chatId, mensagemAutomatica).catch((err) => {
+          if (err.response && err.response.statusCode === 403) {
+            console.log(`🚫 [${new Date().toLocaleTimeString('pt-BR')}] Usuário ${chatId} bloqueou o bot (erro 403)`);
+            bloqueados++;
+          } else {
+            throw err;
+          }
+        });
+        enviadas++;
+      } catch (error) {
+        erros++;
+        console.error(`❌ Erro ao enviar para ${chatId}:`, error.message);
+      }
+    }
+
+    console.log(`✅ [${new Date().toLocaleTimeString('pt-BR')}] Mensagens automáticas: ${enviadas} enviadas, ${bloqueados} bloqueados, ${erros} erros\n`);
+  } catch (error) {
+    console.error('❌ Erro ao enviar mensagens automáticas:', error);
+  }
+}
 
 // ==================== INICIALIZAR TUDO ====================
 async function inicializar() {
